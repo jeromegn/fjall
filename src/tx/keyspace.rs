@@ -34,7 +34,7 @@ impl TxKeyspace {
     #[must_use]
     pub fn write_tx(&self) -> WriteTransaction {
         let guard = self.lock.lock().expect("poisoned tx lock");
-        let instant = self.instant();
+        let instant = self.inner.instant();
 
         let mut write_tx = WriteTransaction::new(
             self.clone(),
@@ -55,7 +55,12 @@ impl TxKeyspace {
     /// Will return `Err` if creating a SSI transaction fails
     #[cfg(feature = "ssi_tx")]
     pub fn write_tx(&self) -> crate::Result<WriteTransaction> {
-        let instant = self.instant();
+        let instant = {
+            // acquire a lock here to prevent geting a stale snapshot seqno
+            // this will drain the queue of transaction commits before this time
+            let _guard = self.orc.write_serialize_lock.lock();
+            self.inner.instant()
+        };
 
         let mut write_tx = WriteTransaction::new(
             self.clone(),
@@ -73,23 +78,9 @@ impl TxKeyspace {
     #[must_use]
     pub fn read_tx(&self) -> ReadTransaction {
         ReadTransaction::new(SnapshotNonce::new(
-            self.instant(),
+            self.inner.instant(),
             self.inner.snapshot_tracker.clone(),
         ))
-    }
-
-    fn instant(&self) -> u64 {
-        #[cfg(feature = "single_writer_tx")]
-        {
-            self.inner.instant()
-        }
-        #[cfg(feature = "ssi_tx")]
-        {
-            // acquire a lock here to prevent geting a stale snapshot seqno
-            // this will drain the queue of transaction commits before this time
-            let _guard = self.orc.write_serialize_lock.lock();
-            self.inner.instant()
-        }
     }
 
     /// Flushes the active journal to OS buffers. The durability depends on the [`PersistMode`]
