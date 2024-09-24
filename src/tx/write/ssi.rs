@@ -17,26 +17,6 @@ use crate::{
 use super::WriteTransaction as InnerWriteTransaction;
 
 #[derive(Debug)]
-pub enum Error {
-    /// Oracle-related error
-    Oracle(oracle::Error),
-}
-
-impl From<oracle::Error> for Error {
-    fn from(value: oracle::Error) -> Self {
-        Self::Oracle(value)
-    }
-}
-
-impl std::error::Error for Error {}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
-#[derive(Debug)]
 pub struct Conflict;
 
 impl std::error::Error for Conflict {}
@@ -678,12 +658,9 @@ impl WriteTransaction {
         }
 
         let orc = self.inner.keyspace.orc.clone();
-        match orc
-            .with_commit(self.inner.nonce.instant, self.cm.into(), move || {
-                self.inner.commit()
-            })
-            .map_err(Error::from)?
-        {
+        match orc.with_commit(self.inner.nonce.instant, self.cm.into(), move || {
+            self.inner.commit()
+        }) {
             CommitOutcome::Ok => Ok(Ok(())),
             CommitOutcome::Aborted(e) => Err(e),
             CommitOutcome::Conflicted => Ok(Err(Conflict)),

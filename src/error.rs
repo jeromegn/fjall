@@ -2,8 +2,6 @@
 // This source code is licensed under both the Apache 2.0 and MIT License
 // (found in the LICENSE-* files in the repository)
 
-#[cfg(feature = "ssi_tx")]
-use crate::tx::write::ssi::Error as SsiError;
 use crate::{journal::error::RecoveryError as JournalRecoveryError, version::Version};
 use lsm_tree::{DecodeError, EncodeError};
 
@@ -39,10 +37,6 @@ pub enum Error {
 
     /// Partition is deleted
     PartitionDeleted,
-
-    #[cfg(feature = "ssi_tx")]
-    /// SSI transaction-related error
-    Ssi(SsiError),
 }
 
 impl std::fmt::Display for Error {
@@ -72,13 +66,6 @@ impl From<DecodeError> for Error {
 impl From<lsm_tree::Error> for Error {
     fn from(inner: lsm_tree::Error) -> Self {
         Self::Storage(inner)
-    }
-}
-
-#[cfg(feature = "ssi_tx")]
-impl From<SsiError> for Error {
-    fn from(value: SsiError) -> Self {
-        Self::Ssi(value)
     }
 }
 

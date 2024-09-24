@@ -1,11 +1,13 @@
+use std::collections::BTreeMap;
+use std::fmt;
+
 use crate::snapshot_tracker::SnapshotTracker;
 use crate::Instant;
 
 use super::conflict_manager::ConflictChecker;
 use lsm_tree::SequenceNumberCounter;
-use std::collections::BTreeMap;
-use std::fmt;
-use std::sync::{Mutex, PoisonError};
+
+use parking_lot::FairMutex;
 
 pub enum CommitOutcome<E> {
     Ok,
@@ -14,7 +16,7 @@ pub enum CommitOutcome<E> {
 }
 
 pub struct Oracle {
-    pub(super) write_serialize_lock: Mutex<BTreeMap<u64, ConflictChecker>>,
+    pub(super) write_serialize_lock: FairMutex<BTreeMap<u64, ConflictChecker>>,
     pub(super) seqno: SequenceNumberCounter,
     pub(super) snapshot_tracker: SnapshotTracker,
 }
@@ -26,11 +28,8 @@ impl Oracle {
         instant: Instant,
         conflict_checker: ConflictChecker,
         f: F,
-    ) -> Result<CommitOutcome<E>, Error> {
-        let mut committed_txns = self
-            .write_serialize_lock
-            .lock()
-            .map_err(|_| Error::Poisoned)?;
+    ) -> CommitOutcome<E> {
+        let mut committed_txns = self.write_serialize_lock.lock();
 
         // If the committed_txn.ts is less than Instant that implies that the
         // committed_txn finished before the current transaction started.
@@ -50,35 +49,16 @@ impl Oracle {
         committed_txns.retain(|ts, _| *ts > safe_to_gc);
 
         if conflicted {
-            return Ok(CommitOutcome::Conflicted);
+            return CommitOutcome::Conflicted;
         }
 
         if let Err(e) = f() {
-            return Ok(CommitOutcome::Aborted(e));
+            return CommitOutcome::Aborted(e);
         }
 
         committed_txns.insert(self.seqno.get(), conflict_checker);
 
-        Ok(CommitOutcome::Ok)
-    }
-}
-
-#[derive(Debug)]
-pub enum Error {
-    /// Poisoned write serialization lock
-    Poisoned,
-}
-
-impl std::error::Error for Error {}
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
-impl<T> From<PoisonError<T>> for Error {
-    fn from(_value: PoisonError<T>) -> Self {
-        Self::Poisoned
+        CommitOutcome::Ok
     }
 }
 
@@ -100,13 +80,13 @@ mod tests {
             run_tx(&ks, &part).unwrap();
         }
 
-        assert!(dbg!(ks.orc.write_serialize_lock.lock().unwrap().len()) < 200);
+        assert!(dbg!(ks.orc.write_serialize_lock.lock().len()) < 200);
 
         for _ in 0..200 {
             run_tx(&ks, &part).unwrap();
         }
 
-        assert!(dbg!(ks.orc.write_serialize_lock.lock().unwrap().len()) < 200);
+        assert!(dbg!(ks.orc.write_serialize_lock.lock().len()) < 200);
     }
 
     fn run_tx(ks: &TxKeyspace, part: &TxPartitionHandle) -> Result<(), Box<dyn std::error::Error>> {
