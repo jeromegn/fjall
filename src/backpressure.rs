@@ -27,7 +27,7 @@ pub fn handle_journal(
     {
         std::thread::sleep(std::time::Duration::from_millis(10));
 
-        if start.elapsed() > std::time::Duration::from_secs(5) {
+        if start.elapsed() > std::time::Duration::from_millis(60) {
             log::debug!("Halting writes for 5+ secs now because journal is still too large");
 
             // TODO: this may not scale well for many keyspaces
@@ -58,18 +58,18 @@ pub fn handle_journal(
                 }
             }
 
-            if start.elapsed() > std::time::Duration::from_secs(10) {
+            if start.elapsed() > std::time::Duration::from_secs(5) {
                 supervisor.snapshot_tracker.pullup();
                 supervisor.snapshot_tracker.gc();
                 break;
             }
 
-            if start.elapsed() > std::time::Duration::from_secs(30) {
+            if start.elapsed() > std::time::Duration::from_secs(10) {
                 log::debug!("Giving up after {:?}", start.elapsed());
                 break;
             }
 
-            std::thread::sleep(Duration::from_millis(490));
+            std::thread::sleep(Duration::from_millis(200));
         }
 
         if is_poisoned.load(std::sync::atomic::Ordering::Relaxed) {

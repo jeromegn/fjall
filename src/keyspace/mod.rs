@@ -750,7 +750,7 @@ impl Keyspace {
 
         if self.tree.version_free_list_len() >= 100 {
             log::warn!(
-                "The version free list has grown very large ({}) - maybe you are keeping a snapshot/read transaction open for too long?", 
+                "The version free list has grown very large ({}) - maybe you are keeping a snapshot/read transaction open for too long?",
                 self.tree.version_free_list_len(),
             );
         }
@@ -823,11 +823,13 @@ impl Keyspace {
 
     pub(crate) fn check_memtable_rotate(&self, size: u64) -> crate::Result<()> {
         if size > self.config.max_memtable_size {
+            log::debug!("rotating memtable");
             self.rotate_memtable().inspect_err(|e| {
                 log::error!("Memtable rotation failed: {e:?}");
                 self.is_poisoned
                     .store(true, std::sync::atomic::Ordering::Relaxed);
             })?;
+            log::debug!("memtable rotated");
         }
         Ok(())
     }

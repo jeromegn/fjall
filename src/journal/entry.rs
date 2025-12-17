@@ -8,7 +8,7 @@ use lsm_tree::{
     coding::{Decode, Encode},
     CompressionType, SeqNo, UserKey, UserValue, ValueType,
 };
-use std::io::{Read, Write};
+use std::io::{IoSlice, Read, Write};
 
 /// Journal entry. Every batch is composed as a Start, followed by N items, followed by an End.
 ///
@@ -74,9 +74,10 @@ pub fn serialize_marker_item<W: Write>(
     #[expect(clippy::cast_possible_truncation)]
     writer.write_u32::<LittleEndian>(compressed_value.len() as u32)?;
 
-    writer.write_all(key)?;
+    writer.write_vectored(&[IoSlice::new(key), IoSlice::new(&compressed_value)])?;
 
-    writer.write_all(&compressed_value)?;
+    // writer.write_all(key)?;
+    // writer.write_all(&compressed_value)?;
 
     Ok(())
 }
